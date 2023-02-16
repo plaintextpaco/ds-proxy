@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-pragma solidity >=0.5.0 <0.6.0;
+pragma solidity >=0.7.0 <0.9.0;
 
 import "ds-test/test.sol";
 import "./proxy.sol";
@@ -49,7 +49,7 @@ contract TestContract {
 }
 
 contract TestFullAssemblyContract {
-    function() external {
+    receive() external payable {
         assembly {
             let message := mload(0x40)
             mstore(message, "Fail test case")
@@ -60,7 +60,7 @@ contract TestFullAssemblyContract {
 
 contract WithdrawFunds {
     function withdraw(uint256 amount) public {
-        msg.sender.transfer(amount);
+        payable(msg.sender).transfer(amount);
     }
 }
 
@@ -79,7 +79,7 @@ contract DSProxyTest is DSTest {
 
     ///test1 - check that DSProxyFactory creates a cache
     function test_DSProxyFactoryCheckCache() public {
-        assertTrue(address(factory.cache) != address(0));
+        assertTrue(factory.cache.address != address(0));
     }
 
     ///test 2 - build a proxy from DSProxyFactory and verify logging
@@ -240,18 +240,18 @@ contract DSProxyTest is DSTest {
 
     ///test 10 - execute an action through proxy which reverts via solidity require
     function test_DSProxyExecuteFailMethod() public {
-        address payable target = address(proxy);
+        address payable target = payable(proxy);
         address testContract = address(new TestContract());
-        bytes memory data = abi.encodeWithSignature("execute(address,bytes)", bytes32(uint(address(testContract))), abi.encodeWithSignature("fail()"));
+        bytes memory data = abi.encodeWithSignature("execute(address,bytes)", bytes32(uint(uint160(address(testContract)))), abi.encodeWithSignature("fail()"));
 
         bool succeeded;
         bytes memory sig;
         bytes memory message;
 
         assembly {
-            succeeded := call(sub(gas, 5000), target, 0, add(data, 0x20), mload(data), 0, 0)
+            succeeded := call(sub(gas(), 5000), target, 0, add(data, 0x20), mload(data), 0, 0)
 
-            let size := returndatasize
+            let size := returndatasize()
 
             let response := mload(0x40)
             mstore(0x40, add(response, and(add(add(size, 0x20), 0x1f), not(0x1f))))
@@ -277,17 +277,17 @@ contract DSProxyTest is DSTest {
 
     ///test 11 - execute an action through proxy which reverts via a pure assembly function
     function test_DSProxyExecuteFailMethodAssembly() public {
-        address payable target = address(proxy);
+        address payable target = payable(proxy);
         address testContract = address(new TestFullAssemblyContract());
-        bytes memory data = abi.encodeWithSignature("execute(address,bytes)", bytes32(uint(address(testContract))), hex"");
+        bytes memory data = abi.encodeWithSignature("execute(address,bytes)", bytes32(uint(uint160(address(testContract)))), hex"");
 
         bool succeeded;
         bytes memory response;
 
         assembly {
-            succeeded := call(sub(gas, 5000), target, 0, add(data, 0x20), mload(data), 0, 0)
+            succeeded := call(sub(gas(), 5000), target, 0, add(data, 0x20), mload(data), 0, 0)
 
-            let size := returndatasize
+            let size := returndatasize()
 
             response := mload(0x40)
             mstore(0x40, add(response, and(add(add(size, 0x20), 0x1f), not(0x1f))))
@@ -301,14 +301,14 @@ contract DSProxyTest is DSTest {
     ///test 12 - deposit ETH to Proxy
     function test_DSProxyDepositETH() public {
         assertEq(address(proxy).balance, 0);
-        (bool success,) = address(proxy).call.value(10)("");
+        (bool success,) = address(proxy).call{value:10}("");
         assertTrue(success);
         assertEq(address(proxy).balance, 10);
     }
 
     ///test 13 - withdraw ETH from Proxy
     function test_DSProxyWithdrawETH() public {
-        (bool success,) = address(proxy).call.value(10)("");
+        (bool success,) = address(proxy).call{value:10}("");
         assertTrue(success);
         assertEq(address(proxy).balance, 10);
         uint256 myBalance = address(this).balance;
@@ -319,6 +319,6 @@ contract DSProxyTest is DSTest {
         assertEq(address(this).balance, myBalance + 5);
     }
 
-    function() external payable {
+    receive() external payable {
     }
 }

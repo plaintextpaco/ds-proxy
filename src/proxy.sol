@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-pragma solidity >=0.5.0 <0.6.0;
+pragma solidity >=0.7.0 <0.9.0;
 
 import "ds-auth/auth.sol";
 import "ds-note/note.sol";
@@ -28,11 +28,11 @@ import "ds-note/note.sol";
 contract DSProxy is DSAuth, DSNote {
     DSProxyCache public cache;  // global cache for contracts
 
-    constructor(address _cacheAddr) public {
+    constructor(address _cacheAddr) {
         setCache(_cacheAddr);
     }
 
-    function() external payable {
+    receive() external payable {
     }
 
     // use the proxy to execute calldata _data on contract _code
@@ -61,8 +61,8 @@ contract DSProxy is DSAuth, DSNote {
 
         // call contract in current context
         assembly {
-            let succeeded := delegatecall(sub(gas, 5000), _target, add(_data, 0x20), mload(_data), 0, 0)
-            let size := returndatasize
+            let succeeded := delegatecall(sub(gas(), 5000), _target, add(_data, 0x20), mload(_data), 0, 0)
+            let size := returndatasize()
 
             response := mload(0x40)
             mstore(0x40, add(response, and(add(add(size, 0x20), 0x1f), not(0x1f))))
@@ -98,7 +98,7 @@ contract DSProxyFactory {
     mapping(address=>bool) public isProxy;
     DSProxyCache public cache;
 
-    constructor() public {
+    constructor() {
         cache = new DSProxyCache();
     }
 
@@ -111,7 +111,7 @@ contract DSProxyFactory {
     // deploys a new proxy instance
     // sets custom owner of proxy
     function build(address owner) public returns (address payable proxy) {
-        proxy = address(new DSProxy(address(cache)));
+        proxy = payable(new DSProxy(address(cache)));
         emit Created(msg.sender, owner, address(proxy), address(cache));
         DSProxy(proxy).setOwner(owner);
         isProxy[proxy] = true;
